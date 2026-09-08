@@ -13,8 +13,8 @@ import {
 import { sql } from 'drizzle-orm';
 
 function createDummyEmbedding(seed: number): number[] {
-  // Generates normalized 1536-dimension float vector for pgvector
-  const vec = new Array(1536).fill(0).map((_, i) => Math.sin(seed + i * 0.1));
+  // Generates normalized 768-dimension float vector for pgvector (Gemini text-embedding-004)
+  const vec = new Array(768).fill(0).map((_, i) => Math.sin(seed + i * 0.1));
   const norm = Math.sqrt(vec.reduce((sum, val) => sum + val * val, 0));
   return vec.map((val) => val / norm);
 }

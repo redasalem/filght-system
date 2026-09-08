@@ -172,7 +172,7 @@ export const destinationGuides = pgTable(
     city: text('city').notNull(),
     country: text('country').notNull(),
     content: text('content').notNull(),
-    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+    embedding: vector('embedding', { dimensions: 768 }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
