@@ -162,7 +162,7 @@ export const passengers = pgTable('passengers', {
 
 /**
  * Destination Guides Table (pgvector)
- * Vector embeddings (1536 dimensions, e.g., OpenAI text-embedding-3-small)
+ * Vector embeddings (768 dimensions, Gemini text-embedding-004)
  * with an HNSW cosine index for AI semantic travel concierge queries.
  */
 export const destinationGuides = pgTable(
