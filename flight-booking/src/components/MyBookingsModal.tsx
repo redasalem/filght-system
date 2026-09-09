@@ -193,14 +193,32 @@ export default function MyBookingsModal({
                   </div>
                 </div>
 
-                {/* Perforation / Barcode Footer */}
-                <div className="pt-4 border-t-2 border-dashed border-[rgba(28,26,20,0.18)] flex justify-between items-center text-xs font-mono text-[#6b6759]">
-                  <div>
-                    <span>DOCUMENT NO: {b.passenger?.passportNumber || 'PASSENGER TICKET'}</span>
+                {/* Perforation / Verification QR Code Footer */}
+                <div className="pt-4 border-t-2 border-dashed border-[rgba(28,26,20,0.18)] flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-mono text-[#6b6759]">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <span>DOCUMENT NO: ••••••••{b.passenger?.passportNumber?.slice(-4) || 'VERIFIED'}</span>
                     <span className="block text-[10px]">TOTAL SETTLED: ${parseFloat(b.totalPrice).toFixed(2)} USD</span>
+                    <a
+                      href={`/verify/${b.pnr}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#244232] font-semibold underline block pt-0.5"
+                    >
+                      Verify Boarding Pass [Mobile View] →
+                    </a>
                   </div>
-                  <div className="tracking-widest font-mono text-base text-[#1c1a14] opacity-75">
-                    ||||| | |||| || ||||| | |||
+                  <div className="p-1 bg-[#f3ecd6] border border-[rgba(28,26,20,0.16)] rounded-[3px] text-center shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/qrcode/image?pnr=${b.pnr}`}
+                      alt={`QR Code for PNR ${b.pnr}`}
+                      width={64}
+                      height={64}
+                      className="w-16 h-16 block mx-auto"
+                    />
+                    <span className="text-[8px] text-[#6b6759] block mt-0.5 tracking-widest">
+                      GATE SCAN
+                    </span>
                   </div>
                 </div>
               </div>

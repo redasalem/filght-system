@@ -9,6 +9,7 @@ function SuccessContent() {
   const sessionId = searchParams.get('session_id');
 
   const [booking, setBooking] = useState<any>(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,8 +29,20 @@ function SuccessContent() {
         const data = await res.json();
 
         if (res.ok && data.bookings && data.bookings.length > 0) {
-          setBooking(data.bookings[0]);
+          const b = data.bookings[0];
+          setBooking(b);
           setLoading(false);
+
+          // Fetch verification QR Code
+          try {
+            const qrRes = await fetch(`/api/qrcode?pnr=${encodeURIComponent(b.pnr)}`);
+            const qrData = await qrRes.json();
+            if (qrData.qrCodeDataUrl) {
+              setQrCodeUrl(qrData.qrCodeDataUrl);
+            }
+          } catch (qrErr) {
+            console.warn('QR Code generation warning:', qrErr);
+          }
         } else {
           attempts++;
           if (attempts < maxAttempts) {
@@ -68,7 +81,7 @@ function SuccessContent() {
           Your Transcontinental Ticket is Confirmed.
         </h1>
         <p className="text-[#6b6759] text-base max-w-lg mx-auto leading-relaxed">
-          Your seat lock in Redis has been converted into a confirmed PostgreSQL reservation. Your ticket and Passenger Name Record (PNR) are ready.
+          Your seat lock in Redis has been converted into a confirmed PostgreSQL reservation. Your ticket, verification QR code, and Passenger Name Record (PNR) are ready.
         </p>
       </div>
 
@@ -110,7 +123,7 @@ function SuccessContent() {
                 {booking.passenger?.fullName || 'VERIFIED PASSENGER'}
               </span>
               <span className="text-[10px] text-[#6b6759]">
-                DOC: {booking.passenger?.passportNumber}
+                DOC: ••••••••{booking.passenger?.passportNumber?.slice(-4) || 'VERIFIED'}
               </span>
             </div>
             <div>
@@ -175,15 +188,44 @@ function SuccessContent() {
             </div>
           </div>
 
-          {/* Barcode Footer */}
-          <div className="pt-6 border-t-2 border-dashed border-[rgba(28,26,20,0.18)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs font-mono text-[#6b6759]">
-            <div>
-              <span>ISSUED BY AEROFLOW FLIGHT OPERATIONS</span>
-              <span className="block text-[10px]">VERIFICATION CODE: {booking.id.slice(0, 8).toUpperCase()}</span>
+          {/* QR Code Verification Section */}
+          <div className="pt-6 border-t-2 border-dashed border-[rgba(28,26,20,0.18)] flex flex-col sm:flex-row justify-between items-center gap-6 text-xs font-mono text-[#6b6759]">
+            <div className="space-y-1 text-center sm:text-left">
+              <div className="font-bold text-[#1c1a14] flex items-center gap-1.5 justify-center sm:justify-start">
+                <span className="w-2 h-2 rounded-full bg-[#244232]" />
+                ELECTRONIC VERIFICATION QR CODE
+              </div>
+              <p className="text-[11px] text-[#6b6759] max-w-sm">
+                Scan with any mobile camera at gate checkpoints to verify ticket state instantly.
+              </p>
+              <Link
+                href={`/verify/${booking.pnr}`}
+                target="_blank"
+                className="text-[#244232] font-semibold underline block pt-1 hover:text-[#1a3024]"
+              >
+                Open Mobile Verification Page →
+              </Link>
             </div>
-            <div className="tracking-widest font-mono text-lg text-[#1c1a14] opacity-80">
-              ||||| ||| ||||||| || |||||| ||||
-            </div>
+
+            {qrCodeUrl ? (
+              <div className="p-2 bg-[#f3ecd6] border border-[rgba(28,26,20,0.16)] rounded-[3px] text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrCodeUrl}
+                  alt={`QR Code for PNR ${booking.pnr}`}
+                  width={112}
+                  height={112}
+                  className="w-28 h-28 block mx-auto"
+                />
+                <span className="text-[9px] text-[#6b6759] block mt-1 tracking-widest">
+                  SCAN TO VERIFY
+                </span>
+              </div>
+            ) : (
+              <div className="tracking-widest font-mono text-lg text-[#1c1a14] opacity-80">
+                ||||| ||| ||||||| || |||||| ||||
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -194,13 +236,22 @@ function SuccessContent() {
       )}
 
       {/* Return Actions */}
-      <div className="mt-10 flex justify-center gap-4">
+      <div className="mt-10 flex flex-wrap justify-center gap-4">
         <Link href="/" className="btn-primary">
           RETURN TO HOME
         </Link>
+        {booking?.pnr && (
+          <Link
+            href={`/verify/${booking.pnr}`}
+            target="_blank"
+            className="btn-secondary"
+          >
+            VIEW VERIFICATION ROUTE
+          </Link>
+        )}
         <button
           onClick={() => window.print()}
-          className="btn-secondary cursor-pointer"
+          className="btn-outline cursor-pointer"
         >
           PRINT BOARDING PASS
         </button>

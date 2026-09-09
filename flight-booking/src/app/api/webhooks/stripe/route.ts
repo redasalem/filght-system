@@ -6,11 +6,16 @@ import {
   bookings,
   passengers,
   seats,
+  flights,
+  airports,
 } from '@/db/schema';
+import { alias } from 'drizzle-orm/pg-core';
 import { getStripe } from '@/lib/stripe';
 import { generatePNR } from '@/lib/pnr';
 import { redis } from '@/lib/redis';
 import { getSeatLockKey } from '@/lib/seat-lock';
+import { generateBoardingPassQRCode } from '@/lib/qrcode';
+import { sendBoardingPassEmail } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -88,10 +93,10 @@ export async function POST(request: NextRequest) {
     ? (session.amount_total / 100).toFixed(2)
     : '0.00';
 
-  let bookingId: string;
+  let bookingResult: { id: string; pnr: string };
 
   try {
-    bookingId = await db.transaction(async (tx) => {
+    bookingResult = await db.transaction(async (tx) => {
       // 3a. Insert idempotency record (duplicate → unique constraint error)
       await tx.insert(processedEvents).values({ id: event.id });
 
@@ -123,7 +128,7 @@ export async function POST(request: NextRequest) {
         .set({ status: 'BOOKED' })
         .where(eq(seats.id, seatId));
 
-      return newBooking.id;
+      return { id: newBooking.id, pnr };
     });
   } catch (error: unknown) {
     // Check for unique constraint violation on processed_events (idempotency)
@@ -161,11 +166,74 @@ export async function POST(request: NextRequest) {
   }
 
   // ------------------------------------------------------------------
-  // 5. Success
+  // 5. Generate QR Code & Send Resend Confirmation Email
+  // ------------------------------------------------------------------
+  try {
+    const recipientEmail =
+      session.customer_details?.email ||
+      session.customer_email ||
+      'passenger@aeroflow.com';
+
+    // Fetch flight & seat info for rich email template
+    const originAirport = alias(airports, 'originAirport');
+    const destinationAirport = alias(airports, 'destinationAirport');
+
+    const [flightDetail] = await db
+      .select({
+        flightNumber: flights.flightNumber,
+        departureTime: flights.departureTime,
+        originCode: originAirport.code,
+        originCity: originAirport.city,
+        destinationCode: destinationAirport.code,
+        destinationCity: destinationAirport.city,
+      })
+      .from(flights)
+      .innerJoin(originAirport, eq(flights.originId, originAirport.id))
+      .innerJoin(destinationAirport, eq(flights.destinationId, destinationAirport.id))
+      .where(eq(flights.id, flightId));
+
+    const [seatDetail] = await db
+      .select({
+        seatNumber: seats.seatNumber,
+        class: seats.class,
+        baggageAllowanceKg: seats.baggageAllowanceKg,
+      })
+      .from(seats)
+      .where(eq(seats.id, seatId));
+
+    const qrCodeDataUrl = await generateBoardingPassQRCode(bookingResult.pnr);
+
+    if (flightDetail && seatDetail) {
+      await sendBoardingPassEmail({
+        recipientEmail,
+        passengerName,
+        pnr: bookingResult.pnr,
+        flightNumber: flightDetail.flightNumber,
+        originCode: flightDetail.originCode,
+        originCity: flightDetail.originCity,
+        destinationCode: flightDetail.destinationCode,
+        destinationCity: flightDetail.destinationCity,
+        departureTime: flightDetail.departureTime.toISOString(),
+        seatNumber: seatDetail.seatNumber,
+        seatClass: seatDetail.class,
+        baggageAllowanceKg: seatDetail.baggageAllowanceKg,
+        qrCodeDataUrl,
+      });
+    }
+  } catch (emailErr) {
+    console.warn('[AeroFlow Webhook] Confirmation email dispatch warning:', emailErr);
+  }
+
+  // ------------------------------------------------------------------
+  // 6. Success
   // ------------------------------------------------------------------
   console.log(
-    `[AeroFlow Webhook] ✅ Booking ${bookingId} confirmed for event ${event.id}`
+    `[AeroFlow Webhook] ✅ Booking ${bookingResult.id} (PNR: ${bookingResult.pnr}) confirmed for event ${event.id}`
   );
 
-  return NextResponse.json({ received: true, bookingId });
+  return NextResponse.json({
+    received: true,
+    bookingId: bookingResult.id,
+    pnr: bookingResult.pnr,
+  });
 }
